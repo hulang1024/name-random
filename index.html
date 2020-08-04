@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>随机抽取</title>
+  <style>
+  html,body {
+    margin: 0px;
+    padding: 0px;
+    background: #fdf6e2;
+    font-family: monospace, '微软雅黑';
+    font-size: 20px;
+    color: #333;
+  }
+
+  body {
+    padding: 20px;
+  }
+
+  .name-card {
+    margin: 4px;
+    width: 80px;
+    height: 80px;
+    line-height: 80px;
+    vertical-align: middle;
+    text-align: center;
+    border-radius: 80px;
+    background: #fff;
+    opacity: 0.4;
+    transition: 0.2s all ease;
+  }
+
+  .name-card--lit {
+    background: cornflowerblue;
+    opacity: 1;
+    color: #fff;
+    box-shadow: 0px 0px 6px rgba(0,0,0,0.2);
+  }
+
+  .main {
+    margin: 0 auto;
+  }
+
+  .names-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .result-title {
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .start-button {
+    width: 200px;
+    height: 40px;
+    margin: 20px auto;
+    display: block;
+    border-radius: 4px;
+    font-size: inherit;
+    font-weight: bold;
+    outline: none;
+    cursor: pointer;
+    transition: .2s all ease;
+  }
+
+  .start-button.primary {
+    background: cornflowerblue;
+    color: #fff;
+  }
+
+  .options {
+    margin: 0 auto;
+    margin-top: 20px;
+    width: fit-content;
+    text-align: center;
+  }
+
+  p {
+    margin: 0px;
+  }
+
+  button {
+    -webkit-tap-highlight-color: rgba(0,0,0,0);
+    -webkit-tap-highlight-color: transparent; 
+  }
+  
+  input {
+    font-size: 16px;
+  }
+  </style>
+</head>
+<body>
+  <div class="options">
+    <div style="margin-bottom: 24px;">
+      从<a href="names.js" target="_blank"><span id="read-count"></span>个人</a>中随机
+    </div>
+    <div class="inputs">
+      <p style="font-weight: bold;">请输入</p>
+      <p>多少抽取轮数？<input id="round-total-input" type="number" min="1" style="width: 40px;" /></p>
+      <p id="round-tip" style="color: #999; font-size: 14px; display: none;">(不同轮的抽取结果可能会重复）</p>
+      <p>每轮抽取人数？<input id="result-number-input" type="number" min="1" style="width: 40px;" /></p>
+    </div>
+  </div>
+
+  <div class="main">
+    <button class="start-button">点击开始</button>
+    <div style="text-align: center;">第<span id="round-count">-</span>轮</div>
+    <div class="result-title">随机抽取结果</div>
+    <div class="names-container"></div>
+  </div>
+
+  <script src="names.js"></script>
+  <script>
+  class NameCard {
+    constructor() {
+      let el = document.createElement('div');
+      el.classList.add('name-card');
+      this.el = el;
+    }
+
+    setName(text) {
+      this.el.innerText = text || '?';
+      this.el.classList[text ? 'add' : 'remove']('name-card--lit');
+    }
+  }
+
+  let candidateNames = [];
+  let nameCards = [];
+  let roundCount = 0;
+
+  let roundTotalInput;
+  let resultNumberInput;
+  let startButton;
+
+  window.onload = function() {
+    candidateNames = readCandidateNames();
+    document.getElementById('read-count').innerText = candidateNames.length;    
+
+    startButton = document.querySelector('.start-button');
+    startButton.state = 'start';
+    startButton.addEventListener('click', () => {
+      switch (startButton.state) {
+        case 'start':
+          if (!roundTotalInput.value) {
+            roundTotalInput.focus();
+            return;
+          }
+          if (!resultNumberInput.value) {
+            resultNumberInput.focus();
+            return;
+          }
+          onNextRoundClick();
+          roundTotalInput.disabled = true;
+          resultNumberInput.disabled = true;
+          document.querySelector('.options > .inputs').style.display = 'none';
+          startButton.state = 'random';
+          break;
+        case 'random':
+          onRandomClick();
+          if (roundCount < +roundTotalInput.value) {
+            startButton.state = 'next-round';
+          } else {
+            startButton.state = 'all-done';
+          }
+          break;
+        case 'next-round':
+          onNextRoundClick();
+          startButton.state = 'random';
+          break;
+      }
+
+      switch(startButton.state) {
+        case 'random':
+          startButton.classList.add('primary');
+          startButton.innerText = '随机抽取';
+          break;
+        case 'next-round':
+          startButton.classList.remove('primary');
+          startButton.innerText = '下一轮';
+          break;
+        case 'all-done':
+          startButton.classList.remove('primary');
+          break;
+      }
+    });
+
+    resultNumberInput = document.getElementById('result-number-input');
+    resultNumberInput.value = localStorage.getItem('resultNumber');
+    resultNumberInput.onchange = function() {
+      if (this.value > candidateNames.length) {
+        this.value = candidateNames.length;
+      }
+      localStorage.setItem('resultNumber', this.value);
+      resetNameCards(this.value || 0);
+    };
+    if (localStorage.getItem('resultNumber')) {
+      resultNumberInput.onchange();
+    }
+
+    roundTotalInput = document.getElementById('round-total-input');
+    roundTotalInput.value = localStorage.getItem('roundTotal');
+    roundTotalInput.onchange = function() {
+      document.getElementById('round-tip').style.display = this.value > 1 ? 'block' : 'none';
+      localStorage.setItem('roundTotal', this.value);
+    };
+    if (localStorage.getItem('roundTotal')) {
+      roundTotalInput.onchange();
+    }
+  };
+
+  function readCandidateNames() {
+    let names = window['人名']
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    names = Array.from(new Set(names));
+    return names;
+  }
+
+  function resetNameCards(nameNumber) {
+    let namesContainer = document.querySelector('.names-container');
+    namesContainer.innerHTML = '';
+    nameCards = [];
+    for (let n = 0; n < nameNumber; n++) {
+      let nameCard = new NameCard();
+      nameCard.setName(null);
+      nameCards.push(nameCard);
+      namesContainer.appendChild(nameCard.el);
+    }
+  }
+
+  function onNextRoundClick() {
+    roundCount++;
+    if (roundCount > +roundTotalInput.value) {
+      startButton.disabled = true;
+    } else {
+      document.getElementById('round-count').innerText = roundCount + '/' + roundTotalInput.value;
+      // 设置为空白的状态
+      nameCards.forEach((nameCard) => {
+        nameCard.setName(null);
+      });
+    }
+  }
+
+  function onRandomClick() {
+    if (candidateNames.length == 0 || +resultNumberInput.value > candidateNames.length) {
+      alert('参数错误');
+      return;
+    }
+
+    startButton.disabled = true;
+
+    let names = candidateNames.concat([]); // 新的数组,不改变原来的
+    for (let cardIndex = 0; cardIndex < resultNumberInput.value; cardIndex++) {
+      let randomIndex = randInt(0, names.length);
+      let nameCard = nameCards[cardIndex];
+      nameCard.setName(names[randomIndex]);
+      // 删除已抽取人名
+      names.splice(randomIndex, 1);
+    }
+    startButton.disabled = false;
+    onRoundDone();
+  }
+
+  function onRoundDone() {
+    if (roundCount >= +roundTotalInput.value) {
+      startButton.disabled = true;
+    }
+  }
+
+  // 随机返回m到n（不包括n）之间的数
+  function randInt(m, n) {
+    return Math.floor(Math.random() * (n - m)) + m;
+  }
+  </script>
+</body>
+</html>
